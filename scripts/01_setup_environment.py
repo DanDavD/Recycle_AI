@@ -12,8 +12,8 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 VENV_DIR = ROOT_DIR / "venv"
 REQUIREMENTS_FILE = ROOT_DIR / "requirements.txt"
 
-# Índice de PyTorch con soporte CUDA 12.1 (compatible con RTX 3060 / Ampere)
-TORCH_CUDA_INDEX_URL = "https://download.pytorch.org/whl/cu121"
+# Índice de PyTorch con soporte CUDA 12.4 (compatible con Python 3.13 + RTX 3060)
+TORCH_CUDA_INDEX_URL = "https://download.pytorch.org/whl/cu124"
 
 CORE_PACKAGES = [
     "ultralytics",
