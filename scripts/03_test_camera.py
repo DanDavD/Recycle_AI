@@ -9,10 +9,19 @@ Ejecutar con el venv activado:
 Controles:
     q -> salir
 """
+import os
+from pathlib import Path
+
 import cv2
+from dotenv import load_dotenv
 from ultralytics import YOLO
 
-CAMERA_INDEX = 0
+ROOT_DIR = Path(__file__).resolve().parent.parent
+
+load_dotenv(ROOT_DIR / ".env")
+# Camara a usar: 0 es la integrada de la laptop. Se puede cambiar sin tocar el
+# codigo poniendo CAMERA_INDEX=1 en el .env.
+CAMERA_INDEX = int(os.environ.get("CAMERA_INDEX", 0))
 # Modelo pre-entrenado de YOLOv8 (80 clases de COCO), solo para probar el
 # pipeline completo. Se descarga automaticamente la primera vez que se usa.
 PRETRAINED_MODEL = "yolov8n.pt"
@@ -22,7 +31,7 @@ def main() -> None:
     cap = cv2.VideoCapture(CAMERA_INDEX)
     if not cap.isOpened():
         print(f"[ERROR] No se pudo abrir la camara (indice {CAMERA_INDEX}).")
-        print("Si tienes varias camaras, prueba cambiando CAMERA_INDEX a 1, 2, etc.")
+        print("Si tienes varias camaras, prueba con CAMERA_INDEX=1 (o 2) en el .env")
         return
 
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))

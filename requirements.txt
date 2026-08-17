@@ -1,3 +1,5 @@
+# Generado por scripts/01_setup_environment.py -- no editar a mano.
+# OJO: no instalar opencv-python-headless, rompe cv2.imshow del script 03.
 annotated-doc==0.0.5
 certifi==2026.7.22
 charset-normalizer==3.4.9
@@ -21,7 +23,6 @@ networkx==3.6.1
 numpy==2.3.5
 nvidia-ml-py==13.610.43
 opencv-python==5.0.0.93
-opencv-python-headless==4.10.0.84
 packaging==26.3
 pandas==3.0.5
 pi_heif==1.4.0
@@ -30,7 +31,7 @@ pillow-avif-plugin==1.6.0
 polars==1.43.2
 polars-runtime-32==1.43.2
 psutil==7.2.2
-Pygments==2.20.0
+Pygments==2.21.0
 pyparsing==3.3.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.3
@@ -39,13 +40,12 @@ requests==2.34.2
 requests-toolbelt==1.0.0
 rich==15.0.0
 roboflow==1.4.0
-setuptools==78.1.0
 shellingham==1.5.4
 six==1.17.0
 sympy==1.13.1
-torch==2.6.0+cu124
-torchaudio==2.6.0+cu124
-torchvision==0.21.0+cu124
+torch==2.5.1+cu121
+torchaudio==2.5.1+cu121
+torchvision==0.20.1+cu121
 tqdm==4.70.0
 typer==0.25.1
 typing_extensions==4.15.0

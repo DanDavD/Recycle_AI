@@ -12,7 +12,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 VENV_DIR = ROOT_DIR / "venv"
 REQUIREMENTS_FILE = ROOT_DIR / "requirements.txt"
 
-# Índice de PyTorch con soporte CUDA 12.4 (compatible con Python 3.13 + RTX 3060)
+# Índice de PyTorch con soporte CUDA 12.4 (compatible con la RTX 4060 de esta maquina)
 TORCH_CUDA_INDEX_URL = "https://download.pytorch.org/whl/cu124"
 
 CORE_PACKAGES = [
@@ -21,6 +21,8 @@ CORE_PACKAGES = [
     "numpy",
     "pandas",
     "requests",
+    "roboflow",       # descarga de datasets (scripts/04_load_dataset.py)
+    "python-dotenv",  # lectura del .env con la ROBOFLOW_API_KEY
 ]
 
 
@@ -60,9 +62,20 @@ def main() -> None:
     # Resto de dependencias del proyecto
     run([python_bin, "-m", "pip", "install", *CORE_PACKAGES])
 
+    # roboflow arrastra opencv-python-headless, que sobrescribe el modulo cv2 de
+    # opencv-python con una build sin GUI: cv2.imshow deja de funcionar y el
+    # script 03 no puede mostrar la ventana de video. Lo quitamos y reinstalamos
+    # la build normal (roboflow sigue funcionando, usa el mismo modulo cv2).
+    print("[..] Quitando opencv-python-headless para conservar cv2.imshow")
+    subprocess.run([python_bin, "-m", "pip", "uninstall", "-y", "opencv-python-headless"], check=False)
+    run([python_bin, "-m", "pip", "install", "--force-reinstall", "--no-deps", "opencv-python"])
+
     # Congelar versiones exactas instaladas
     print(f"[..] Guardando dependencias en {REQUIREMENTS_FILE}")
     with open(REQUIREMENTS_FILE, "w", encoding="utf-8") as f:
+        f.write("# Generado por scripts/01_setup_environment.py -- no editar a mano.\n")
+        f.write("# OJO: no instalar opencv-python-headless, rompe cv2.imshow del script 03.\n")
+        f.flush()
         subprocess.run([python_bin, "-m", "pip", "freeze"], stdout=f, check=True)
     print("[OK] requirements.txt actualizado")
 
@@ -71,6 +84,13 @@ def main() -> None:
         print(r"    .\venv\Scripts\Activate.ps1")
     else:
         print("    source venv/bin/activate")
+
+    if not (ROOT_DIR / ".env").exists():
+        print("\nFalta el .env con tu API key de Roboflow. Creala copiando la plantilla:")
+        if sys.platform == "win32":
+            print(r"    copy .env.example .env")
+        else:
+            print("    cp .env.example .env")
 
 
 if __name__ == "__main__":

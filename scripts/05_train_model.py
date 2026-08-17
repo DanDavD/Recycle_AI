@@ -7,6 +7,7 @@ Uso:
     python scripts/05_train_model.py                          # valores por defecto
     python scripts/05_train_model.py --epochs 150 --batch 8   # ajustes manuales
     python scripts/05_train_model.py --dataset plastic-paper-metal
+    python scripts/05_train_model.py --degrees 0 --flipud 0   # sin rotacion (comparar)
 
 Los pesos finales se copian a models/<nombre_run>.pt y el run completo
 (graficas, matriz de confusion, metricas) queda en runs/detect/<nombre_run>/.
@@ -31,11 +32,24 @@ DEFAULT_DATASET = "plastic-paper-metal"
 # Si quieres mas precision y aguanta la VRAM, prueba yolov8s.pt.
 DEFAULT_WEIGHTS = "yolov8n.pt"
 
-# Defaults calibrados para la RTX 3060 Laptop (6 GB de VRAM).
+# Defaults calibrados para la RTX 4060 Laptop (8 GB de VRAM).
 DEFAULT_EPOCHS = 100
 DEFAULT_IMGSZ = 640
 DEFAULT_BATCH = 16
 DEFAULT_WORKERS = 4  # en Windows subir esto suele dar problemas con el DataLoader
+
+# --- Augmentation para que reconozca objetos al reves y en angulos raros ------
+# Ultralytics aumenta en vivo, distinto en cada epoch, asi que sale mejor que
+# hornear rotaciones fijas en Roboflow. Sus defaults NO cubren nuestro caso:
+#   degrees=0.0  -> sin rotacion
+#   flipud=0.0   -> sin volteo vertical, o sea nunca ve un objeto boca abajo
+#   fliplr=0.5   -> volteo horizontal, este si viene activado
+# En un basurero la basura cae en cualquier orientacion, asi que los subimos.
+# degrees=180 cubre el circulo completo; el coste es que la caja (axis-aligned)
+# queda algo mas holgada en angulos intermedios, lo cual no nos afecta: solo
+# necesitamos saber QUE material es para abrir la compuerta, no recortarlo fino.
+DEFAULT_DEGREES = 180.0
+DEFAULT_FLIPUD = 0.5
 
 
 def find_data_yaml(dataset_name: str) -> Path:
@@ -96,6 +110,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--imgsz", type=int, default=DEFAULT_IMGSZ)
     parser.add_argument("--batch", type=int, default=DEFAULT_BATCH, help="baja a 8 si da error de memoria (CUDA OOM)")
     parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS)
+    parser.add_argument(
+        "--degrees",
+        type=float,
+        default=DEFAULT_DEGREES,
+        help="rango de rotacion aleatoria en grados (0 = sin rotacion)",
+    )
+    parser.add_argument(
+        "--flipud",
+        type=float,
+        default=DEFAULT_FLIPUD,
+        help="probabilidad de volteo vertical, para que aprenda objetos boca abajo",
+    )
     parser.add_argument("--name", default=None, help="nombre del run (por defecto: <dataset>_<weights>)")
     parser.add_argument("--resume", action="store_true", help="reanuda el ultimo entrenamiento interrumpido")
     return parser.parse_args()
@@ -107,13 +133,27 @@ def main() -> None:
     data_yaml = find_data_yaml(args.dataset)
     device = pick_device()
     run_name = args.name or f"{args.dataset}_{Path(args.weights).stem}"
+    print(f"[OK] Augmentation: rotacion +-{args.degrees:g} grados | volteo vertical p={args.flipud:g}")
 
-    # Si los pesos base estan en la raiz del proyecto usamos esa copia y evitamos
-    # que ultralytics los vuelva a descargar.
-    weights = args.weights
-    local_weights = ROOT_DIR / weights
-    if local_weights.exists():
-        weights = str(local_weights)
+    if args.resume:
+        # Para reanudar hay que cargar el last.pt del run interrumpido: ultralytics
+        # saca de ahi el optimizador y el epoch donde se quedo. Arrancar desde los
+        # pesos base con resume=True no reanuda nada.
+        weights = RUNS_DIR / "detect" / run_name / "weights" / "last.pt"
+        if not weights.exists():
+            sys.exit(
+                f"No encuentro {weights}\n"
+                f"No hay un entrenamiento '{run_name}' que reanudar. Lanza el script sin --resume."
+            )
+        print(f"[OK] Reanudando desde {weights}")
+        weights = str(weights)
+    else:
+        # Si los pesos base estan en la raiz del proyecto usamos esa copia y evitamos
+        # que ultralytics los vuelva a descargar.
+        weights = args.weights
+        local_weights = ROOT_DIR / weights
+        if local_weights.exists():
+            weights = str(local_weights)
 
     model = YOLO(weights)
     model.train(
@@ -132,6 +172,8 @@ def main() -> None:
         cache=False,     # con 2234 imagenes cabe en RAM, pero cache=True se come 8+ GB
         plots=True,
         seed=0,
+        degrees=args.degrees,
+        flipud=args.flipud,
     )
 
     metrics = model.val()

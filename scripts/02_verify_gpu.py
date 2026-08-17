@@ -1,5 +1,5 @@
 """
-Script 02: verifica que PyTorch detecta la GPU (RTX 3060) vía CUDA.
+Script 02: verifica que PyTorch detecta la GPU (RTX 4060) vía CUDA.
 
 Ejecutar con el venv activado:
     python scripts/02_verify_gpu.py

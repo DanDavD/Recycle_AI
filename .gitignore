@@ -33,5 +33,6 @@ runs/
 Thumbs.db
 .DS_Store
 
-# Variables de entorno
+# Variables de entorno (la plantilla .env.example si va versionada)
 .env
+!.env.example
