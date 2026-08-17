@@ -5,8 +5,9 @@ Detección de residuos reciclables (plástico, papel, metal) en tiempo real usan
 ## Especificaciones
 
 - **Hardware**: Laptop Gigabyte G5 (GPU RTX 4060 8 GB, i5-11va, 16GB RAM)
-- **Dataset**: Plastic-Paper-Metal (Roboflow), versión 2 — 2234 imágenes, 3 clases
-- **Split**: 1956 train / 185 valid / 93 test
+- **Dataset**: combinación de datasets de Roboflow (ver `DATASETS` en
+  [scripts/04_load_dataset.py](scripts/04_load_dataset.py)), unificados con
+  `scripts/combine_datasets.py` en las 3 clases plastic/paper/metal
 - **Objetivo**: Modelo de detección con >90% de precisión
 
 ## Estructura del proyecto
@@ -15,9 +16,10 @@ Detección de residuos reciclables (plástico, papel, metal) en tiempo real usan
 Recycle_AI/
 ├── venv/
 ├── datasets/                     # se descarga con el script 04 (no va en git)
-│   └── plastic-paper-metal/
-│       ├── train/ valid/ test/   # cada uno con images/ y labels/
-│       └── data.yaml
+│   ├── <dataset-1>/ <dataset-2>/ ...   # tal cual los baja Roboflow
+│   │   ├── train/ valid/ test/         # cada uno con images/ y labels/
+│   │   └── data.yaml
+│   └── combined/                 # generado por combine_datasets.py (el que se entrena)
 ├── models/                       # pesos entrenados (no van en git)
 ├── runs/detect/<run>/            # gráficas y métricas de cada entrenamiento
 ├── scripts/
@@ -25,6 +27,7 @@ Recycle_AI/
 │   ├── 02_verify_gpu.py
 │   ├── 03_test_camera.py
 │   ├── 04_load_dataset.py
+│   ├── combine_datasets.py       # une varios datasets en uno solo (plastic/paper/metal)
 │   ├── 05_train_model.py
 │   └── 06_run_bin.py             # inferencia en vivo del basurero
 ├── .env.example                  # plantilla: copiar a .env y poner la API key
@@ -55,16 +58,25 @@ python scripts\02_verify_gpu.py      # que torch vea la GPU vía CUDA
 python scripts\03_test_camera.py     # cámara + YOLO pre-entrenado en vivo (q para salir)
 ```
 
-**4. Descargar el dataset**:
+**4. Descargar los datasets** (todos los registrados en `DATASETS`):
 
 ```powershell
 python scripts\04_load_dataset.py
 ```
 
-**5. Entrenar**:
+**5. Combinarlos en uno solo** (se queda solo con plastic/paper/metal; descarta
+otras clases como `glass` que traigan los datasets externos):
 
 ```powershell
-python scripts\05_train_model.py
+python scripts\combine_datasets.py
+```
+
+Queda en `datasets\combined\`, con split 80% train / 10% valid / 10% test.
+
+**6. Entrenar**:
+
+```powershell
+python scripts\05_train_model.py --dataset combined
 ```
 
 Los pesos finales quedan en `models\<run>.pt` y las gráficas/métricas en `runs\detect\<run>\`.
@@ -73,7 +85,7 @@ Por defecto entrena con rotación aleatoria (`--degrees 180`) y volteo vertical
 (`--flipud 0.5`), para que reconozca los objetos boca abajo y en ángulos raros —
 los valores por defecto de ultralytics no cubren eso.
 
-**6. Correr el basurero**:
+**7. Correr el basurero**:
 
 ```powershell
 python scripts\06_run_bin.py

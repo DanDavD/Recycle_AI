@@ -35,12 +35,25 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 DATASETS_DIR = ROOT_DIR / "datasets"
 
 # Registro de datasets. La clave es el nombre de la carpeta destino dentro de datasets/.
+#
+# "plastic-paper-metal" (workspace propio, danielfdd2004-unitec-edu) se descarto:
+# nunca tuvo una version generada del lado de Roboflow (por eso fallaba la
+# descarga) y al querer generarla se acabaron los creditos de la cuenta. Si en
+# algun momento se recupera, se puede volver a agregar aqui con su version.
 DATASETS = {
-    "plastic-paper-metal": {
-        "workspace": "danielfdd2004-unitec-edu",
-        "project": "plastic-paper-metal",
-        # Version 2 = 2234 imagenes (1956 train / 185 valid / 93 test) con augmentations.
-        # La version 1 es un export "Roboflow Instant [Eval]" de solo 118 imagenes.
+    "paper-plastic-metal-potato": {
+        "workspace": "potato-jkpgv",
+        "project": "paper-plastic-metal",
+        # 515 imagenes. Dataset externo (Roboflow Universe) sumado para tener mas
+        # diversidad de fotos reales, no solo augmentations del dataset propio.
+        "version": 1,
+    },
+    "plastic-glass-metal-paper": {
+        "workspace": "example-wg2gf",
+        "project": "plastic-glass-metal-paper",
+        # 2826 imagenes (version del modelo publicado con 94.9% mAP50). Trae una
+        # 4ta clase "glass" que NO queremos: scripts/combine_datasets.py la excluye
+        # al armar el dataset combinado para entrenar.
         "version": 2,
     },
 }
@@ -142,7 +155,7 @@ def wait_for_export(api_key: str, workspace: str, project: str, version: int, fm
     return False
 
 
-def download_dataset(api_key: str, name: str, config: dict) -> Path:
+def download_dataset(api_key: str, name: str, config: dict) -> Path | None:
     workspace = config["workspace"]
     project_slug = config["project"]
     version_number = config["version"]
@@ -181,12 +194,13 @@ def download_dataset(api_key: str, name: str, config: dict) -> Path:
         print(f"[OK] {name}: descargado en {location}")
         return location
 
-    sys.exit(
+    print(
         f"\n[!!] No se pudo descargar '{name}': ningun formato ({', '.join(formats)}) tiene un "
         f"export valido en Roboflow.\n"
         f"     Regenera la version {version_number} desde la web de Roboflow "
-        f"(Versions > Generate New Version) y vuelve a ejecutar este script."
+        f"(Versions > Generate New Version) y vuelve a correr este dataset.\n"
     )
+    return None
 
 
 def describe_dataset(location: Path) -> None:
@@ -269,12 +283,24 @@ def main() -> None:
             "     y pega ahi tu Private API Key (app.roboflow.com > Settings > API Keys)."
         )
 
+    fallidos = []
     for name, config in trabajos:
         location = download_dataset(api_key, name, config)
+        if location is None:
+            fallidos.append(name)
+            continue
         describe_dataset(location)
 
-    print("\nSiguiente paso:")
-    print(f"    python scripts/05_train_model.py --dataset {trabajos[0][0]}")
+    if fallidos:
+        print(f"\n[!!] No se pudieron descargar: {', '.join(fallidos)} (ver mensajes arriba)")
+
+    exitosos = [n for n, _ in trabajos if n not in fallidos]
+    if exitosos:
+        print("\nSiguiente paso:")
+        print("    python scripts/combine_datasets.py")
+
+    if fallidos:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
