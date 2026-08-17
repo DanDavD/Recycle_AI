@@ -9,12 +9,15 @@ __pycache__/
 *.egg-info/
 .eggs/
 
-# Dataset (se descarga aparte, demasiado pesado para git)
-datasets/*/images/*
-datasets/*/labels/*
-!datasets/*/images/.gitkeep
-!datasets/*/labels/.gitkeep
+# Datasets (se descargan con scripts/04_load_dataset.py, demasiado pesados para git)
+datasets/**
+!datasets/.gitkeep
 *.cache
+
+# Pesos base descargados por ultralytics (yolov8n.pt si va versionado en el repo)
+yolov8*.pt
+yolo11*.pt
+!yolov8n.pt
 
 # Modelos entrenados (pesos pesados, no van en git)
 models/*.pt
