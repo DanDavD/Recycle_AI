@@ -33,10 +33,7 @@ MODELS_DIR = ROOT_DIR / "models"
 load_dotenv(ROOT_DIR / ".env")
 CAMERA_INDEX = int(os.environ.get("CAMERA_INDEX", 0))
 
-# Confianza minima para actuar. Por debajo de esto el basurero no abre nada y
-# sigue mirando: es preferible esperar un frame mas que mandar un plastico al
-# tacho del papel, porque contaminar la mezcla arruina el reciclaje del lote.
-# Si prefieres que responda siempre sin importar la duda, baja esto a 0.01.
+# Confianza minima para actuar (40% de acierto para abrir compuerta).
 DEFAULT_CONF = 0.40
 
 # Frames seguidos con el mismo material antes de abrir la compuerta. Evita que
@@ -70,7 +67,7 @@ def resolve_compartment(class_name: str) -> int | None:
     return None
 
 
-def abrir_compuerta(material: str, compuerta: int) -> None:
+def abrir_compuerta(material: str, compuerta: int, confianza: float = 0.0) -> None:
     """Punto de conexion con el hardware del basurero.
 
     Aqui va el codigo del servo. Dos formas tipicas:
@@ -204,13 +201,13 @@ def main() -> None:
                 frames_seguidos = 1 if material is not None else 0
             ultimo_material = material
 
-            if material is not None and frames_seguidos >= args.stable and time.time() >= listo_en:
+            if material is not None and confianza >= 0.40 and frames_seguidos >= args.stable and time.time() >= listo_en:
                 compuerta = resolve_compartment(material)
                 if compuerta is None:
                     print(f"[!!] '{material}' no tiene compuerta asignada, no abro nada")
                 else:
                     print(f"[OK] {material} ({confianza:.0%}) estable en {frames_seguidos} frames")
-                    abrir_compuerta(material, compuerta)
+                    abrir_compuerta(material, compuerta, confianza=confianza)
                 listo_en = time.time() + args.cooldown
                 frames_seguidos = 0
                 ultimo_material = None
