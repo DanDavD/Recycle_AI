@@ -35,21 +35,58 @@ DATASETS_DIR = ROOT_DIR / "datasets"
 
 TARGET_CLASSES = ["metal", "paper", "plastic"]
 
-# Nombres de clase de cada dataset externo -> una de TARGET_CLASSES.
-# Cualquier nombre que no aparezca aqui ni en TARGET_CLASSES se descarta
-# (asi es como se excluye "glass" sin tener que tocar el codigo por dataset).
+# Mapeo exhaustivo de variantes y sinónimos para datasets externos
 ALIASES = {
+    # --- PLÁSTICO ---
     "plastics": "plastic",
     "pet": "plastic",
+    "plastic bottle": "plastic",
+    "plastic-bottle": "plastic",
+    "plastic_bottle": "plastic",
+    "bottle": "plastic",
+    "bottles": "plastic",
+    "plastic bag": "plastic",
+    "plastic-bag": "plastic",
+    "plastic_bag": "plastic",
+    "bag": "plastic",
+    "plastic cup": "plastic",
+    "cup": "plastic",
+    "plastic container": "plastic",
+    "container": "plastic",
+    "hdpe": "plastic",
+    "plastic wrapper": "plastic",
+    "wrapper": "plastic",
+    "straw": "plastic",
+
+    # --- PAPEL Y CARTÓN ---
     "papers": "paper",
     "cardboard": "paper",
     "paper/cardboard": "paper",
+    "paper-cardboard": "paper",
+    "paper bag": "paper",
+    "paper cup": "paper",
+    "carton": "paper",
+    "box": "paper",
+    "boxes": "paper",
+    "newspaper": "paper",
+    "magazine": "paper",
+
+    # --- METAL ---
     "metals": "metal",
     "can": "metal",
     "cans": "metal",
+    "drink can": "metal",
+    "food can": "metal",
+    "tin can": "metal",
+    "tin_can": "metal",
     "aluminum": "metal",
     "aluminium": "metal",
+    "aluminum can": "metal",
     "tin": "metal",
+    "foil": "metal",
+    "metal cap": "metal",
+    "bottle cap": "metal",
+    "cap": "metal",
 }
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
@@ -59,7 +96,13 @@ def normalize_class(name: str) -> str | None:
     key = name.strip().lower()
     if key in TARGET_CLASSES:
         return key
-    return ALIASES.get(key)
+    if key in ALIASES:
+        return ALIASES[key]
+    # Búsqueda por subcadena inteligente
+    for alias_key, target in ALIASES.items():
+        if alias_key in key:
+            return target
+    return None
 
 
 def find_source_datasets() -> list:
