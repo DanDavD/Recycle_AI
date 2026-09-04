@@ -65,6 +65,30 @@ DATASETS = {
         "project": "metal-cans",
         "version": 1,
     },
+    # 8. Metal/latas — refuerzo para balancear la clase metal
+    "metal-detect-can": {
+        "workspace": "mark-nyjbc",
+        "project": "detect-can-ddp9h",
+        "version": 1,
+    },
+    # 9. Metal (METAL, Can, Cardboard)
+    "metal-dpyt1": {
+        "workspace": "gbitirme",
+        "project": "metal-dpyt1",
+        "version": 1,
+    },
+    # 10. Aluminio (container, aerosol can, cans)
+    "metal-aluminum-klcps": {
+        "workspace": "openpath-robotics",
+        "project": "aluminum-klcps",
+        "version": 1,
+    },
+    # 11. Reciclables (plastic, glass, metal) — aporta metal extra
+    "metal-recyclable-items": {
+        "workspace": "durio",
+        "project": "recyclable-items-0vzpm",
+        "version": 1,
+    },
 }
 
 

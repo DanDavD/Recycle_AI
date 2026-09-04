@@ -125,6 +125,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--val-frac", type=float, default=0.1)
     parser.add_argument("--test-frac", type=float, default=0.1)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--target-per-class",
+        type=int,
+        default=None,
+        help="fuerza un tope manual de cajas por clase (por defecto: el mínimo entre las 3 clases, i.e. metal)",
+    )
     return parser.parse_args()
 
 
@@ -171,14 +177,17 @@ def main():
             counts[TARGET_CLASSES[int(b.split()[0])]] += 1
     print(f"\n[INFO] Cajas encontradas antes de balanceo: {counts}")
 
-    # Criterio de balanceo: que el papel no supere por mucho a los demás
-    max_paper_allowed = max(1800, int(counts["plastic"] * 1.05))
+    # Criterio de balanceo: metal es el cuello de botella (la clase con menos cajas),
+    # así que se queda completo y paper/plastic se recortan a su nivel para quedar parejos.
+    # --target-per-class permite forzar un número manual si algún día metal deja de ser el mínimo.
+    target_per_class = args.target_per_class or min(counts.values())
+    print(f"[INFO] Tope por clase (metal manda): {target_per_class}")
 
     balanced_pool = []
     cur = {c: 0 for c in TARGET_CLASSES}
     for tag, img, boxes in pool:
         cls_in_img = [TARGET_CLASSES[int(b.split()[0])] for b in boxes]
-        if all(cur[c] >= max_paper_allowed for c in cls_in_img):
+        if all(cur[c] >= target_per_class for c in cls_in_img):
             continue
         balanced_pool.append((tag, img, boxes))
         for c in cls_in_img:
