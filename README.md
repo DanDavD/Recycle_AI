@@ -75,9 +75,17 @@ Queda en `datasets\combined\`, con split 80% train / 10% valid / 10% test.
 
 **6. Entrenar**:
 
-```powershell
-python scripts\05_train_model.py --dataset combined
+- **Opción A (Nuevo modelo desde cero):**
+```bash
+python scripts/05_train_model.py --dataset combined --epochs 100
 ```
+
+- **Opción B (Añadir aprendizaje sobre el modelo actual - Fine Tuning):**
+```bash
+python scripts/05_train_model.py --dataset combined --epochs 100 --fine-tune
+```
+
+*(Nota: si prefieres entrenar en Google Colab con GPU T4 gratuita, consulta la guía [COLAB.md](COLAB.md)).*
 
 Los pesos finales quedan en `models\<run>.pt` y las gráficas/métricas en `runs\detect\<run>\`.
 

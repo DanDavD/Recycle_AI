@@ -1,16 +1,19 @@
 """
-Script 05: entrena el modelo YOLOv8 de clasificacion de reciclaje.
+Script 05: Entrena el modelo YOLOv8 de clasificación de reciclaje.
 
-Requiere que el dataset ya este descargado con scripts/04_load_dataset.py.
+Requiere que el dataset ya esté descargado y combinado con:
+    python scripts/04_load_dataset.py
+    python scripts/combine_datasets.py
 
 Uso:
-    python scripts/05_train_model.py                          # valores por defecto
-    python scripts/05_train_model.py --epochs 150 --batch 8   # ajustes manuales
-    python scripts/05_train_model.py --dataset plastic-paper-metal
-    python scripts/05_train_model.py --degrees 0 --flipud 0   # sin rotacion (comparar)
+    # 1. Entrenar modelo nuevo desde cero:
+    python scripts/05_train_model.py --dataset combined --epochs 100
 
-Los pesos finales se copian a models/<nombre_run>.pt y el run completo
-(graficas, matriz de confusion, metricas) queda en runs/detect/<nombre_run>/.
+    # 2. Añadir más aprendizaje sobre el modelo actual (Fine-Tuning):
+    python scripts/05_train_model.py --dataset combined --epochs 100 --fine-tune
+
+Los pesos finales se copian a models/<run>.pt y el reporte completo
+queda en runs/detect/<run>/.
 """
 
 import argparse
@@ -27,45 +30,59 @@ DATASETS_DIR = ROOT_DIR / "datasets"
 MODELS_DIR = ROOT_DIR / "models"
 RUNS_DIR = ROOT_DIR / "runs"
 
-DEFAULT_DATASET = "plastic-paper-metal"
-# yolov8n: el mas rapido, pensado para correr en vivo con la camara.
-# Si quieres mas precision y aguanta la VRAM, prueba yolov8s.pt.
+DEFAULT_DATASET = "combined"
 DEFAULT_WEIGHTS = "yolov8n.pt"
 
-# Defaults calibrados para la RTX 4060 Laptop (8 GB de VRAM).
+# Defaults calibrados para entrenamiento
 DEFAULT_EPOCHS = 100
 DEFAULT_IMGSZ = 640
 DEFAULT_BATCH = 16
-DEFAULT_WORKERS = 4  # en Windows subir esto suele dar problemas con el DataLoader
+DEFAULT_WORKERS = 4
 
-# --- Augmentation para que reconozca objetos al reves y en angulos raros ------
-# Ultralytics aumenta en vivo, distinto en cada epoch, asi que sale mejor que
-# hornear rotaciones fijas en Roboflow. Sus defaults NO cubren nuestro caso:
-#   degrees=0.0  -> sin rotacion
-#   flipud=0.0   -> sin volteo vertical, o sea nunca ve un objeto boca abajo
-#   fliplr=0.5   -> volteo horizontal, este si viene activado
-# En un basurero la basura cae en cualquier orientacion, asi que los subimos.
-# degrees=180 cubre el circulo completo; el coste es que la caja (axis-aligned)
-# queda algo mas holgada en angulos intermedios, lo cual no nos afecta: solo
-# necesitamos saber QUE material es para abrir la compuerta, no recortarlo fino.
+# Data Augmentation óptimo para basureros inteligentes
 DEFAULT_DEGREES = 180.0
 DEFAULT_FLIPUD = 0.5
 
 
-def find_data_yaml(dataset_name: str) -> Path:
-    """Devuelve el data.yaml del dataset y corrige sus rutas si hace falta.
+def find_latest_trained_weights() -> Path | None:
+    """Busca el modelo .pt entrenado más reciente en models/."""
+    if not MODELS_DIR.exists():
+        return None
+    candidatos = [
+        p for p in MODELS_DIR.glob("*.pt")
+        if p.name not in ("yolov8n.pt", "yolov8s.pt", "yolo26n.pt")
+    ]
+    if not candidatos:
+        return None
+    candidatos.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return candidatos[0]
 
-    Roboflow escribe rutas relativas ('../train/images') que solo funcionan si
-    ejecutas desde dentro de la carpeta del dataset. Las reescribimos a rutas
-    absolutas para poder lanzar el entrenamiento desde cualquier sitio.
-    """
+
+def get_next_model_path(base_name: str) -> Path:
+    """Genera un nombre sin sobreescribir checkpoints anteriores (ej. combined_yolov8n3.pt)."""
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    target = MODELS_DIR / f"{base_name}.pt"
+    if not target.exists():
+        return target
+    counter = 2
+    while True:
+        target = MODELS_DIR / f"{base_name}{counter}.pt"
+        if not target.exists():
+            return target
+        counter += 1
+
+
+def find_data_yaml(dataset_name: str) -> Path:
+    """Devuelve el data.yaml del dataset y corrige sus rutas si hace falta."""
     dataset_dir = DATASETS_DIR / dataset_name
     data_yaml = dataset_dir / "data.yaml"
 
     if not data_yaml.exists():
         sys.exit(
             f"No encuentro {data_yaml}\n"
-            f"Descarga el dataset primero:  python scripts/04_load_dataset.py {dataset_name}"
+            f"Prepara el dataset primero corriendo:\n"
+            f"    python scripts/04_load_dataset.py\n"
+            f"    python scripts/combine_datasets.py"
         )
 
     with open(data_yaml, encoding="utf-8") as f:
@@ -77,7 +94,6 @@ def find_data_yaml(dataset_name: str) -> Path:
             continue
         split_dir = dataset_dir / split.replace("val", "valid") / "images"
         if not split_dir.exists():
-            # algunos exports usan 'val' en vez de 'valid'
             split_dir = dataset_dir / split / "images"
         if split_dir.exists() and data[split] != str(split_dir):
             data[split] = str(split_dir)
@@ -98,32 +114,38 @@ def pick_device() -> str:
         vram = torch.cuda.get_device_properties(0).total_memory / 1024**3
         print(f"[OK] Entrenando en GPU: {name} ({vram:.1f} GB)")
         return "0"
-    print("[!!] No hay GPU disponible, se entrenara en CPU (mucho mas lento)")
+    print("[!!] No hay GPU disponible, se entrenará en CPU (más lento)")
     return "cpu"
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Entrena el modelo de reciclaje")
-    parser.add_argument("--dataset", default=DEFAULT_DATASET, help="carpeta dentro de datasets/")
-    parser.add_argument("--weights", default=DEFAULT_WEIGHTS, help="pesos base (yolov8n.pt, yolov8s.pt, ...)")
+    parser = argparse.ArgumentParser(description="Entrena el modelo de reciclaje YOLOv8")
+    parser.add_argument("--dataset", default=DEFAULT_DATASET, help="carpeta dentro de datasets/ (def: combined)")
+    parser.add_argument("--weights", default=DEFAULT_WEIGHTS, help="pesos base (yolov8n.pt o ruta a un .pt previo)")
+    parser.add_argument(
+        "--fine-tune",
+        "--from-latest",
+        action="store_true",
+        help="Continúa entrenando a partir del modelo más reciente en models/ (Fine-Tuning)",
+    )
     parser.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
     parser.add_argument("--imgsz", type=int, default=DEFAULT_IMGSZ)
-    parser.add_argument("--batch", type=int, default=DEFAULT_BATCH, help="baja a 8 si da error de memoria (CUDA OOM)")
+    parser.add_argument("--batch", type=int, default=DEFAULT_BATCH, help="baja a 8 si da error de memoria VRAM")
     parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS)
     parser.add_argument(
         "--degrees",
         type=float,
         default=DEFAULT_DEGREES,
-        help="rango de rotacion aleatoria en grados (0 = sin rotacion)",
+        help="rango de rotación aleatoria en grados",
     )
     parser.add_argument(
         "--flipud",
         type=float,
         default=DEFAULT_FLIPUD,
-        help="probabilidad de volteo vertical, para que aprenda objetos boca abajo",
+        help="probabilidad de volteo vertical (objetos al revés)",
     )
-    parser.add_argument("--name", default=None, help="nombre del run (por defecto: <dataset>_<weights>)")
-    parser.add_argument("--resume", action="store_true", help="reanuda el ultimo entrenamiento interrumpido")
+    parser.add_argument("--name", default=None, help="nombre del run")
+    parser.add_argument("--resume", action="store_true", help="reanuda el último entrenamiento interrumpido")
     return parser.parse_args()
 
 
@@ -132,25 +154,27 @@ def main() -> None:
 
     data_yaml = find_data_yaml(args.dataset)
     device = pick_device()
-    run_name = args.name or f"{args.dataset}_{Path(args.weights).stem}"
-    print(f"[OK] Augmentation: rotacion +-{args.degrees:g} grados | volteo vertical p={args.flipud:g}")
+
+    weights = args.weights
+    if args.fine_tune or weights == "latest":
+        latest_pt = find_latest_trained_weights()
+        if latest_pt:
+            weights = str(latest_pt)
+            print(f"\n[OK] 🚀 Modo Fine-Tuning: Continuando a partir de {latest_pt.name}")
+        else:
+            print(f"[!!] No hay modelos previos en models/, entrenando desde base: {DEFAULT_WEIGHTS}")
+            weights = DEFAULT_WEIGHTS
+
+    run_name = args.name or f"{args.dataset}_{Path(weights).stem}"
+    print(f"[OK] Augmentation: rotación +-{args.degrees:g}° | volteo vertical p={args.flipud:g}")
 
     if args.resume:
-        # Para reanudar hay que cargar el last.pt del run interrumpido: ultralytics
-        # saca de ahi el optimizador y el epoch donde se quedo. Arrancar desde los
-        # pesos base con resume=True no reanuda nada.
-        weights = RUNS_DIR / "detect" / run_name / "weights" / "last.pt"
-        if not weights.exists():
-            sys.exit(
-                f"No encuentro {weights}\n"
-                f"No hay un entrenamiento '{run_name}' que reanudar. Lanza el script sin --resume."
-            )
-        print(f"[OK] Reanudando desde {weights}")
-        weights = str(weights)
+        weights_resume = RUNS_DIR / "detect" / run_name / "weights" / "last.pt"
+        if not weights_resume.exists():
+            sys.exit(f"No encuentro {weights_resume} para reanudar.")
+        print(f"[OK] Reanudando desde {weights_resume}")
+        weights = str(weights_resume)
     else:
-        # Si los pesos base estan en la raiz del proyecto usamos esa copia y evitamos
-        # que ultralytics los vuelva a descargar.
-        weights = args.weights
         local_weights = ROOT_DIR / weights
         if local_weights.exists():
             weights = str(local_weights)
@@ -167,9 +191,9 @@ def main() -> None:
         name=run_name,
         exist_ok=True,
         resume=args.resume,
-        patience=25,     # corta si no mejora en 25 epochs
-        amp=True,        # precision mixta: menos VRAM y mas velocidad
-        cache=False,     # con 2234 imagenes cabe en RAM, pero cache=True se come 8+ GB
+        patience=25,     # detiene si no mejora en 25 epochs
+        amp=True,        # precisión mixta para acelerar en GPU
+        cache=False,
         plots=True,
         seed=0,
         degrees=args.degrees,
@@ -177,17 +201,16 @@ def main() -> None:
     )
 
     metrics = model.val()
-    print("\n=== Resultados en validacion ===")
+    print("\n=== Resultados en validación ===")
     print(f"mAP50    : {metrics.box.map50:.4f}")
     print(f"mAP50-95 : {metrics.box.map:.4f}")
 
     best = RUNS_DIR / "detect" / run_name / "weights" / "best.pt"
     if best.exists():
-        MODELS_DIR.mkdir(exist_ok=True)
-        destino = MODELS_DIR / f"{run_name}.pt"
+        destino = get_next_model_path(run_name)
         shutil.copy2(best, destino)
-        print(f"\n[OK] Mejor modelo copiado a {destino}")
-        print(f"[OK] Graficas y metricas en {best.parent.parent}")
+        print(f"\n✅ [EXITO] Mejor modelo guardado en: {destino}")
+        print(f"📊 Gráficas y métricas guardadas en: {best.parent.parent}\n")
 
 
 if __name__ == "__main__":
