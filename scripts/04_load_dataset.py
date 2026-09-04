@@ -13,6 +13,7 @@ Uso:
 import argparse
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 from dotenv import load_dotenv
@@ -20,6 +21,7 @@ from roboflow import Roboflow
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DATASETS_DIR = ROOT_DIR / "datasets"
+NEGATIVES_DIR = DATASETS_DIR / "negatives"
 
 # Registro central de datasets para el proyecto Recycle_AI
 DATASETS = {
@@ -77,22 +79,34 @@ DATASETS = {
         "project": "plastic-bottles-7nk9f",
         "version": 1,
     },
-    # --- Datasets de plástico adicionales comentados para evitar saturación ---
-    # "plastic-detection-ctqd5": {
-    #     "workspace": "viraj-gi9zk",
-    #     "project": "plastic-detection-ctqd5",
-    #     "version": 2,
-    # },
-    # "plastic-waste-classification": {
-    #     "workspace": "rsbpproject",
-    #     "project": "waste_classification-koank",
-    #     "version": 1,
-    # },
-    # "plastic-bluewaste": {
-    #     "workspace": "omary-mkuu",
-    #     "project": "bluewaste",
-    #     "version": 2,
-    # },
+    # 10. Plástico general (botellas, bolsas)
+    "plastic-detection-ctqd5": {
+        "workspace": "viraj-gi9zk",
+        "project": "plastic-detection-ctqd5",
+        "version": 2,
+    },
+    # 11. Plástico — bolsas/botellas/detergente (waste_classification)
+    "plastic-waste-classification": {
+        "workspace": "rsbpproject",
+        "project": "waste_classification-koank",
+        "version": 1,
+    },
+    # 12. Plástico — botella/bolsa (bluewaste, mezclado con glass que se descarta solo)
+    "plastic-bluewaste": {
+        "workspace": "omary-mkuu",
+        "project": "bluewaste",
+        "version": 2,
+    },
+}
+
+# Registro opcional de fuentes de negativos (fondos, madera, tela, desechos ajenos)
+NEGATIVE_DATASETS = {
+    # Desechos orgánicos y generales para entrenar rechazo de fondo
+    "garbage-negatives": {
+        "workspace": "dhafar-sami",
+        "project": "all-classes-trash-dataset80-3",
+        "version": 3,
+    },
 }
 
 
@@ -166,14 +180,59 @@ def parse_snippet(text: str) -> dict:
     return config
 
 
+def extract_images_to_negatives(source_dir: Path, target_dir: Path = NEGATIVES_DIR, max_images: int = 500) -> int:
+    """Copia imágenes de un dataset a la carpeta de negativos ignorando sus etiquetas originales."""
+    target_dir.mkdir(parents=True, exist_ok=True)
+    count = 0
+    extensions = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+    for path in sorted(source_dir.rglob("*")):
+        if path.is_file() and path.suffix.lower() in extensions:
+            if target_dir in path.parents:
+                continue
+            dst = target_dir / f"{source_dir.name}_{path.stem}{path.suffix.lower()}"
+            if not dst.exists():
+                shutil.copy2(path, dst)
+                count += 1
+                if count >= max_images:
+                    break
+    return count
+
+
 def main():
     parser = argparse.ArgumentParser(description="Descarga datasets de Roboflow para Recycle_AI")
     parser.add_argument("datasets", nargs="*", help="nombres a descargar (por defecto: todos los registrados)")
     parser.add_argument("--snippet", help="ruta al archivo con el snippet de Roboflow, o '-' para pegarlo")
+    parser.add_argument(
+        "--download-negatives",
+        action="store_true",
+        help="descarga datasets registrados en NEGATIVE_DATASETS y extrae sus imágenes a datasets/negatives/",
+    )
+    parser.add_argument(
+        "--extract-negatives",
+        metavar="DATASET_O_CARPETA",
+        help="extrae sólo imágenes de una carpeta o dataset existente hacia datasets/negatives/ (sin etiquetas)",
+    )
+    parser.add_argument(
+        "--max-negatives-extract",
+        type=int,
+        default=500,
+        help="máximo de imágenes a extraer a datasets/negatives/ (default: 500)",
+    )
     args = parser.parse_args()
 
     load_dotenv(ROOT_DIR / ".env")
     api_key = os.environ.get("ROBOFLOW_API_KEY", "loIOyQL5vSDizjI7ZiT8")
+
+    # Opción de extracción directa de negativos
+    if args.extract_negatives:
+        origen = Path(args.extract_negatives)
+        if not origen.is_dir():
+            origen = DATASETS_DIR / args.extract_negatives
+        if not origen.is_dir():
+            sys.exit(f"[ERROR] No se encuentra la carpeta origen: {args.extract_negatives}")
+        total = extract_images_to_negatives(origen, NEGATIVES_DIR, args.max_negatives_extract)
+        print(f"✅ Se extrajeron {total} imágenes a {NEGATIVES_DIR}")
+        return
 
     if args.snippet:
         if args.snippet == "-":
@@ -189,6 +248,18 @@ def main():
 
     DATASETS_DIR.mkdir(parents=True, exist_ok=True)
     rf = Roboflow(api_key=api_key)
+
+    # Descarga de negativos registrados si se solicitó con --download-negatives
+    if args.download_negatives:
+        print(f"\n[..] Descargando {len(NEGATIVE_DATASETS)} dataset(s) de negativos...")
+        for name, cfg in NEGATIVE_DATASETS.items():
+            ok = descargar_dataset(rf, cfg["workspace"], cfg["project"], name, cfg.get("version", 1))
+            if ok:
+                cant = extract_images_to_negatives(DATASETS_DIR / name, NEGATIVES_DIR, args.max_negatives_extract)
+                print(f"   -> Extraídas {cant} imágenes negativas de '{name}' a {NEGATIVES_DIR}")
+        print(f"✅ Proceso de descarga de negativos completado. Imágenes listas en {NEGATIVES_DIR}.\n")
+        if not args.datasets:
+            return
 
     names = args.datasets or list(DATASETS.keys())
     print(f"Iniciando descarga de {len(names)} dataset(s)...")

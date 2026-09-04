@@ -104,7 +104,8 @@ def find_data_yaml(dataset_name: str) -> Path:
             yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
         print(f"[OK] Rutas de {data_yaml.name} convertidas a absolutas")
 
-    print(f"[OK] Dataset: {dataset_name} | clases ({data.get('nc')}): {data.get('names')}")
+    nc = data.get("nc") or (len(data.get("names", [])) if isinstance(data.get("names"), (list, dict)) else "?")
+    print(f"[OK] Dataset: {dataset_name} | clases ({nc}): {data.get('names')}")
     return data_yaml
 
 

@@ -32,7 +32,7 @@ ALIASES = {
     "metal cap": "metal", "bottle cap": "metal", "cap": "metal", "metal cans": "metal", "metal-cans": "metal",
 }
 
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 
 def normalize_class(name: str) -> str | None:
@@ -53,8 +53,21 @@ def find_source_datasets() -> list:
     return [
         e.name
         for e in sorted(DATASETS_DIR.iterdir())
-        if e.is_dir() and e.name != "combined" and (e / "data.yaml").exists()
+        if e.is_dir() and e.name not in ("combined", "negatives") and (e / "data.yaml").exists()
     ]
+
+
+def load_negative_images(negatives_dir: Path) -> list:
+    """Carga todas las imágenes de fondo/objetos ajenos de la carpeta de negativos sin cajas."""
+    if not negatives_dir.is_dir():
+        return []
+    neg_images = []
+    for path in sorted(negatives_dir.rglob("*")):
+        if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS:
+            # Si está en una subcarpeta (ej. wood, fabric, organic), usar el nombre de la subcarpeta
+            cat = path.parent.name if path.parent != negatives_dir else "bg"
+            neg_images.append((f"neg_{cat}", path, []))
+    return neg_images
 
 
 def load_class_map(dataset_dir: Path) -> dict:
@@ -86,6 +99,7 @@ def print_distribution_table(dataset_dir: Path):
     splits = ["train", "valid", "test"]
     split_counts = {s: Counter() for s in splits}
     split_images = {s: 0 for s in splits}
+    split_negatives = {s: 0 for s in splits}
 
     for s in splits:
         img_d, lbl_d = dataset_dir / s / "images", dataset_dir / s / "labels"
@@ -93,8 +107,11 @@ def print_distribution_table(dataset_dir: Path):
             split_images[s] = len([f for f in img_d.iterdir() if f.is_file()])
         if lbl_d.exists():
             for lbl in lbl_d.glob("*.txt"):
-                with open(lbl, "r", encoding="utf-8") as f:
-                    for line in f:
+                content = lbl.read_text(encoding="utf-8").strip()
+                if not content:
+                    split_negatives[s] += 1
+                else:
+                    for line in content.splitlines():
                         if line.strip():
                             split_counts[s][int(line.split()[0])] += 1
 
@@ -102,6 +119,8 @@ def print_distribution_table(dataset_dir: Path):
     for s in splits:
         total_counts.update(split_counts[s])
     total_objs = sum(total_counts.values())
+    total_imgs = sum(split_images.values())
+    total_negs = sum(split_negatives.values())
 
     print("\n" + "=" * 66)
     print(" 📊 DISTRIBUCIÓN FINAL DEL DATASET COMBINADO")
@@ -116,15 +135,50 @@ def print_distribution_table(dataset_dir: Path):
     print("-" * 66)
     print(f"{'TOTAL OBJETOS':<12} | {sum(split_counts['train'].values()):<7} | {sum(split_counts['valid'].values()):<6} | {sum(split_counts['test'].values()):<6} | {total_objs:<7} | 100.0%")
     print("=" * 66)
-    print(f"\n🖼️  Total imágenes: {sum(split_images.values())}\n")
+
+    if total_negs > 0:
+        neg_pct = (total_negs / total_imgs * 100) if total_imgs > 0 else 0
+        print(f"🚫 Negativos (fondo/ajenos): {total_negs} imágenes ({neg_pct:.1f}% del total de imágenes)")
+        print(f"   Train: {split_negatives['train']:<5} | Val: {split_negatives['valid']:<5} | Test: {split_negatives['test']:<5}")
+        print("=" * 66)
+
+    print(f"🖼️  Total imágenes (positivas + negativas): {total_imgs}\n")
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Combina datasets de Roboflow en uno solo")
+    parser = argparse.ArgumentParser(description="Combina datasets de Roboflow en uno solo con balanceo y soporte de negativos")
     parser.add_argument("--output", default="combined", help="carpeta destino dentro de datasets/")
     parser.add_argument("--val-frac", type=float, default=0.1)
     parser.add_argument("--test-frac", type=float, default=0.1)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--no-balance",
+        action="store_true",
+        help="desactiva el balanceo estricto (usa todos los datos disponibles sin recortar)",
+    )
+    parser.add_argument(
+        "--target-per-class",
+        type=int,
+        default=None,
+        help="fuerza un tope manual de cajas por clase (por defecto: el mínimo entre las clases)",
+    )
+    parser.add_argument(
+        "--negatives-dir",
+        default=str(DATASETS_DIR / "negatives"),
+        help="carpeta con imágenes negativas (fondo/objetos ajenos sin etiquetas)",
+    )
+    parser.add_argument(
+        "--negatives-ratio",
+        type=float,
+        default=0.10,
+        help="proporción de negativos respecto al total de imágenes positivas (default: 0.10 i.e. 10%%)",
+    )
+    parser.add_argument(
+        "--max-negatives",
+        type=int,
+        default=None,
+        help="tope máximo de imágenes negativas a incluir",
+    )
     return parser.parse_args()
 
 
@@ -164,22 +218,77 @@ def main():
     random.seed(args.seed)
     random.shuffle(pool)
 
-    # Mostrar conteo total
+    # Contar cajas positivas antes de balancear
     counts = {c: 0 for c in TARGET_CLASSES}
     for _, _, boxes in pool:
         for b in boxes:
             counts[TARGET_CLASSES[int(b.split()[0])]] += 1
-    print(f"\n[INFO] Cajas totales por clase: {counts}")
+    print(f"\n[INFO] Cajas encontradas antes de balanceo: {counts}")
 
-    n_total = len(pool)
-    n_test = int(n_total * args.test_frac)
-    n_val = int(n_total * args.val_frac)
+    # Balanceo por tope uniforme
+    if not args.no_balance:
+        target_per_class = args.target_per_class or (min(counts.values()) if counts.values() else 0)
+        print(f"[INFO] Balanceando clases a tope uniforme: {target_per_class} cajas por clase")
+        balanced_pool = []
+        cur = {c: 0 for c in TARGET_CLASSES}
+        for tag, img, boxes in pool:
+            cls_in_img = [TARGET_CLASSES[int(b.split()[0])] for b in boxes]
+            if all(cur[c] >= target_per_class for c in cls_in_img):
+                continue
+            balanced_pool.append((tag, img, boxes))
+            for c in cls_in_img:
+                cur[c] += 1
+        pool = balanced_pool
+        print(f"[INFO] Cajas balanceadas finales: {cur}")
+    else:
+        print("[INFO] Balanceo desactivado (--no-balance): usando todas las imágenes positivas disponibles.")
+
+    num_positives = len(pool)
+    print(f"[INFO] Total imágenes positivas seleccionadas: {num_positives}")
+
+    # Cargar y seleccionar imágenes negativas (fondo/objetos ajenos sin etiquetas)
+    negatives_dir = Path(args.negatives_dir)
+    neg_pool = load_negative_images(negatives_dir)
+    selected_negatives = []
+    if neg_pool:
+        target_negatives = int(num_positives * args.negatives_ratio)
+        if args.max_negatives is not None:
+            target_negatives = min(target_negatives, args.max_negatives)
+        random.shuffle(neg_pool)
+        selected_negatives = neg_pool[:target_negatives] if target_negatives < len(neg_pool) else neg_pool
+        actual_ratio = (len(selected_negatives) / num_positives * 100) if num_positives > 0 else 0
+        print(f"[INFO] Incorporando {len(selected_negatives)} imágenes negativas desde {negatives_dir} ({actual_ratio:.1f}% de positivos)")
+    else:
+        print(f"[INFO] No se encontraron imágenes negativas en {negatives_dir} (opcional para reducir falsos positivos)")
+
+    # Separar splits (train, valid, test) para positivos
+    n_pos_test = int(num_positives * args.test_frac)
+    n_pos_val = int(num_positives * args.val_frac)
+    train_pos = pool[n_pos_test + n_pos_val:]
+    val_pos = pool[n_pos_test:n_pos_test + n_pos_val]
+    test_pos = pool[:n_pos_test]
+
+    # Separar splits de manera idéntica para negativos
+    n_neg = len(selected_negatives)
+    n_neg_test = int(n_neg * args.test_frac)
+    n_neg_val = int(n_neg * args.val_frac)
+    train_neg = selected_negatives[n_neg_test + n_neg_val:]
+    val_neg = selected_negatives[n_neg_test:n_neg_test + n_neg_val]
+    test_neg = selected_negatives[:n_neg_test]
+
+    train_samples = train_pos + train_neg
+    val_samples = val_pos + val_neg
+    test_samples = test_pos + test_neg
+
+    random.shuffle(train_samples)
+    random.shuffle(val_samples)
+    random.shuffle(test_samples)
 
     out_dir = DATASETS_DIR / args.output
     if out_dir.exists():
         shutil.rmtree(out_dir)
 
-    for s_name, samples in [("train", pool[n_test + n_val:]), ("valid", pool[n_test:n_test + n_val]), ("test", pool[:n_test])]:
+    for s_name, samples in [("train", train_samples), ("valid", val_samples), ("test", test_samples)]:
         i_out, l_out = out_dir / s_name / "images", out_dir / s_name / "labels"
         i_out.mkdir(parents=True, exist_ok=True)
         l_out.mkdir(parents=True, exist_ok=True)
@@ -187,8 +296,13 @@ def main():
             ext = src_img.suffix.lower()
             dst = f"{tag}_{src_img.stem}_{i:05d}"
             shutil.copy2(src_img, i_out / f"{dst}{ext}")
-            with open(l_out / f"{dst}.txt", "w", encoding="utf-8") as f:
-                f.write("\n".join(boxes) + "\n")
+            lbl_file = l_out / f"{dst}.txt"
+            if boxes:
+                with open(lbl_file, "w", encoding="utf-8") as f:
+                    f.write("\n".join(boxes) + "\n")
+            else:
+                # Fondo o negativo sin objetos: archivo de etiquetas vacío (YOLOv8 background image)
+                open(lbl_file, "w", encoding="utf-8").close()
 
     with open(out_dir / "data.yaml", "w", encoding="utf-8") as f:
         yaml.safe_dump(
@@ -197,11 +311,13 @@ def main():
                 "train": "train/images",
                 "val": "valid/images",
                 "test": "test/images",
+                "nc": len(TARGET_CLASSES),
                 "names": TARGET_CLASSES,
             },
             f,
         )
-    print(f"\n[OK] Dataset combinado exitosamente en {out_dir} con {n_total} imágenes.")
+    n_total_imgs = len(train_samples) + len(val_samples) + len(test_samples)
+    print(f"\n[OK] Dataset combinado exitosamente en {out_dir} con {n_total_imgs} imágenes.")
 
     # Imprimir automáticamente la tabla de distribución
     print_distribution_table(out_dir)

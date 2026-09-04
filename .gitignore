@@ -12,6 +12,9 @@ __pycache__/
 # Datasets (se descargan con scripts/04_load_dataset.py, demasiado pesados para git)
 datasets/**
 !datasets/.gitkeep
+!datasets/negatives/
+!datasets/negatives/.gitkeep
+!datasets/negatives/README.md
 *.cache
 
 # Pesos base descargados por ultralytics (yolov8n.pt si va versionado en el repo)
