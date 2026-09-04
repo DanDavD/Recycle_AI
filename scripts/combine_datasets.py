@@ -125,12 +125,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--val-frac", type=float, default=0.1)
     parser.add_argument("--test-frac", type=float, default=0.1)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument(
-        "--target-per-class",
-        type=int,
-        default=None,
-        help="fuerza un tope manual de cajas por clase (por defecto: el mínimo entre las 3 clases, i.e. metal)",
-    )
     return parser.parse_args()
 
 
@@ -170,31 +164,12 @@ def main():
     random.seed(args.seed)
     random.shuffle(pool)
 
-    # Contar cajas antes de balancear
+    # Mostrar conteo total sin recortar nada
     counts = {c: 0 for c in TARGET_CLASSES}
     for _, _, boxes in pool:
         for b in boxes:
             counts[TARGET_CLASSES[int(b.split()[0])]] += 1
-    print(f"\n[INFO] Cajas encontradas antes de balanceo: {counts}")
-
-    # Criterio de balanceo: metal es el cuello de botella (la clase con menos cajas),
-    # así que se queda completo y paper/plastic se recortan a su nivel para quedar parejos.
-    # --target-per-class permite forzar un número manual si algún día metal deja de ser el mínimo.
-    target_per_class = args.target_per_class or min(counts.values())
-    print(f"[INFO] Tope por clase (metal manda): {target_per_class}")
-
-    balanced_pool = []
-    cur = {c: 0 for c in TARGET_CLASSES}
-    for tag, img, boxes in pool:
-        cls_in_img = [TARGET_CLASSES[int(b.split()[0])] for b in boxes]
-        if all(cur[c] >= target_per_class for c in cls_in_img):
-            continue
-        balanced_pool.append((tag, img, boxes))
-        for c in cls_in_img:
-            cur[c] += 1
-
-    pool = balanced_pool
-    print(f"[INFO] Cajas balanceadas finales: {cur}")
+    print(f"\n[INFO] Cajas totales por clase: {counts}")
 
     n_total = len(pool)
     n_test = int(n_total * args.test_frac)
