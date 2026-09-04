@@ -41,73 +41,55 @@ DATASETS = {
         "project": "paper-rjcig",
         "version": 1,
     },
-    # 4. Metal (metal-wswbj)
-    "metal-wswbj": {
-        "workspace": "garbage-gu06e",
-        "project": "metal-wswbj",
-        "version": 1,
-    },
-    # 5. Plástico botellas (plastic-bottles)
+    # 4. Plástico botellas (plastic-bottles)
     "plastic-bottles": {
         "workspace": "waste-rq8p9",
         "project": "plastic-bottles-uu8v9",
         "version": 1,
     },
-    # 6. Plástico variado y latas (trash-detection)
+    # 5. Plástico variado y latas (trash-detection)
     "trash-detection": {
         "workspace": "trash-dataset-for-oriented-bounded-box",
         "project": "trash-detection-1fjjc",
         "version": 1,
     },
-    # 7. Latas de metal dedicadas (SnapCycleV2)
-    "metal-cans": {
-        "workspace": "snapcyclev2",
-        "project": "metal-cans",
-        "version": 1,
-    },
-    # 8. Metal/latas — refuerzo para balancear la clase metal
+    # 6. Metal/latas — refuerzo para balancear la clase metal
     "metal-detect-can": {
         "workspace": "mark-nyjbc",
         "project": "detect-can-ddp9h",
         "version": 1,
     },
-    # 9. Metal (METAL, Can, Cardboard)
+    # 7. Metal (METAL, Can, Cardboard)
     "metal-dpyt1": {
         "workspace": "gbitirme",
         "project": "metal-dpyt1",
         "version": 1,
     },
-    # 10. Aluminio (container, aerosol can, cans)
-    "metal-aluminum-klcps": {
-        "workspace": "openpath-robotics",
-        "project": "aluminum-klcps",
-        "version": 1,
-    },
-    # 11. Reciclables (plastic, glass, metal) — aporta metal extra
+    # 8. Reciclables (plastic, glass, metal) — aporta metal extra
     "metal-recyclable-items": {
         "workspace": "durio",
         "project": "recyclable-items-0vzpm",
         "version": 1,
     },
-    # 12. Plástico — botellas dedicadas (1721 imágenes, el más grueso)
+    # 9. Plástico — botellas dedicadas (1721 imágenes, el más grueso)
     "plastic-bottles-7nk9f": {
         "workspace": "timileyin",
         "project": "plastic-bottles-7nk9f",
         "version": 1,
     },
-    # 13. Plástico general (botellas, bolsas)
+    # 10. Plástico general (botellas, bolsas)
     "plastic-detection-ctqd5": {
         "workspace": "viraj-gi9zk",
         "project": "plastic-detection-ctqd5",
         "version": 2,
     },
-    # 14. Plástico — bolsas/botellas/detergente (waste_classification)
+    # 11. Plástico — bolsas/botellas/detergente (waste_classification)
     "plastic-waste-classification": {
         "workspace": "rsbpproject",
         "project": "waste_classification-koank",
         "version": 1,
     },
-    # 15. Plástico — botella/bolsa (bluewaste, mezclado con glass que se descarta solo)
+    # 12. Plástico — botella/bolsa (bluewaste, mezclado con glass que se descarta solo)
     "plastic-bluewaste": {
         "workspace": "omary-mkuu",
         "project": "bluewaste",
