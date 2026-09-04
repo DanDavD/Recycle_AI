@@ -164,7 +164,7 @@ def main():
     random.seed(args.seed)
     random.shuffle(pool)
 
-    # Mostrar conteo total sin recortar nada
+    # Mostrar conteo total
     counts = {c: 0 for c in TARGET_CLASSES}
     for _, _, boxes in pool:
         for b in boxes:

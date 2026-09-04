@@ -71,30 +71,28 @@ DATASETS = {
         "project": "recyclable-items-0vzpm",
         "version": 1,
     },
-    # 9. Plástico — botellas dedicadas (1721 imágenes, el más grueso)
+    # 9. Plástico — botellas dedicadas (refuerzo equilibrado)
     "plastic-bottles-7nk9f": {
         "workspace": "timileyin",
         "project": "plastic-bottles-7nk9f",
         "version": 1,
     },
-    # 10. Plástico general (botellas, bolsas)
-    "plastic-detection-ctqd5": {
-        "workspace": "viraj-gi9zk",
-        "project": "plastic-detection-ctqd5",
-        "version": 2,
-    },
-    # 11. Plástico — bolsas/botellas/detergente (waste_classification)
-    "plastic-waste-classification": {
-        "workspace": "rsbpproject",
-        "project": "waste_classification-koank",
-        "version": 1,
-    },
-    # 12. Plástico — botella/bolsa (bluewaste, mezclado con glass que se descarta solo)
-    "plastic-bluewaste": {
-        "workspace": "omary-mkuu",
-        "project": "bluewaste",
-        "version": 2,
-    },
+    # --- Datasets de plástico adicionales comentados para evitar saturación ---
+    # "plastic-detection-ctqd5": {
+    #     "workspace": "viraj-gi9zk",
+    #     "project": "plastic-detection-ctqd5",
+    #     "version": 2,
+    # },
+    # "plastic-waste-classification": {
+    #     "workspace": "rsbpproject",
+    #     "project": "waste_classification-koank",
+    #     "version": 1,
+    # },
+    # "plastic-bluewaste": {
+    #     "workspace": "omary-mkuu",
+    #     "project": "bluewaste",
+    #     "version": 2,
+    # },
 }
 
 
