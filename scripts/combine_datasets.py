@@ -47,6 +47,25 @@ def normalize_class(name: str) -> str | None:
     return None
 
 
+def polygon_to_bbox(coords: list[float]) -> tuple[float, float, float, float] | None:
+    """Convierte un polígono de segmentación [x1, y1, x2, y2, ...] a bounding box [xc, yc, w, h] normalizado."""
+    if len(coords) < 4 or len(coords) % 2 != 0:
+        return None
+    xs = coords[0::2]
+    ys = coords[1::2]
+    xmin = max(0.0, min(xs))
+    xmax = min(1.0, max(xs))
+    ymin = max(0.0, min(ys))
+    ymax = min(1.0, max(ys))
+    w = xmax - xmin
+    h = ymax - ymin
+    if w <= 0.001 or h <= 0.001:
+        return None
+    xc = xmin + w / 2.0
+    yc = ymin + h / 2.0
+    return xc, yc, w, h
+
+
 def find_source_datasets() -> list:
     if not DATASETS_DIR.is_dir():
         return []
@@ -210,8 +229,27 @@ def main():
                         if not parts:
                             continue
                         target_class = class_map.get(int(parts[0]))
-                        if target_class is not None:
-                            valid_boxes.append(f"{target_indices[target_class]} {' '.join(parts[1:])}")
+                        if target_class is None:
+                            continue
+                        
+                        # Si es bounding box estándar: 1 clase + 4 coordenadas
+                        if len(parts) == 5:
+                            try:
+                                xc, yc, w, h = (float(v) for v in parts[1:5])
+                                if w > 0.001 and h > 0.001:
+                                    valid_boxes.append(f"{target_indices[target_class]} {xc:.6f} {yc:.6f} {w:.6f} {h:.6f}")
+                            except ValueError:
+                                continue
+                        # Si es polígono de segmentación: 1 clase + n puntos (x1 y1 x2 y2 ...)
+                        elif len(parts) > 5:
+                            try:
+                                coords = [float(p) for p in parts[1:]]
+                                bbox = polygon_to_bbox(coords)
+                                if bbox is not None:
+                                    xc, yc, w, h = bbox
+                                    valid_boxes.append(f"{target_indices[target_class]} {xc:.6f} {yc:.6f} {w:.6f} {h:.6f}")
+                            except ValueError:
+                                continue
                 if valid_boxes:
                     pool.append((name, img_path, valid_boxes))
 
